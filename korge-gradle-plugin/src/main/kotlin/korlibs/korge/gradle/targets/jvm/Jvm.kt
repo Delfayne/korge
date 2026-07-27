@@ -16,6 +16,7 @@ import korlibs.korge.gradle.targets.desktop.DesktopJreBundler
 import korlibs.korge.gradle.util.KorgeReloadNotifier
 import korlibs.korge.gradle.util.closure
 import korlibs.korge.gradle.util.createThis
+import korlibs.korge.gradle.util.registerThis
 import korlibs.korge.gradle.util.get
 import korlibs.korge.gradle.util.writeTextIfChanged
 import korlibs.main
@@ -84,7 +85,7 @@ fun Project.configureJvmRunJvm(isRootKorlibs: Boolean) {
     fun generateEntryPoint(entry: KorgeExtension.Entrypoint) {
         val capitalizedEntryName =
             entry.name.replaceFirstChar { if (it.isLowerCase()) it.titlecase(getDefault()) else it.toString() }
-        project.tasks.createThis<KorgeJavaExec>("runJvm${capitalizedEntryName}") {
+        project.tasks.registerThis<KorgeJavaExec>("runJvm${capitalizedEntryName}") {
             group = GROUP_KORGE_RUN
             dependsOn("jvmMainClasses")
             project.afterEvaluate {
@@ -98,7 +99,7 @@ fun Project.configureJvmRunJvm(isRootKorlibs: Boolean) {
                 false -> "runJvm${capitalizedEntryName}Autoreload"
                 true -> "runJvm${capitalizedEntryName}AutoreloadWithRedefinition"
             }
-            project.tasks.createThis<KorgeJavaExecWithAutoreload>(taskName) {
+            project.tasks.registerThis<KorgeJavaExecWithAutoreload>(taskName) {
                 this.enableRedefinition = enableRedefinition
                 group = GROUP_KORGE_RUN
                 dependsOn("jvmMainClasses", "compileKotlinJvm")
