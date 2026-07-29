@@ -133,12 +133,16 @@ class X11GameWindow(checkGl: Boolean) : EventLoopGameWindow() {
         // The window is built with XCreateWindow against a colormap constructed from the chosen GLX
         // visual, not XCreateSimpleWindow (which always uses the screen's default visual/colormap,
         // ignoring the one glXChooseVisual picked). The Khronos GLX context-creation tutorial linked
-        // above explicitly documents XCreateSimpleWindow as unusable for this reason.
+        // above explicitly documents XCreateSimpleWindow as unusable for this reason. background_pixel
+        // (and CWBackPixel in the value mask) is likewise required; without it the X server never
+        // performs an initial paint on the window, matching what a real GLX reference client
+        // (mesa-demos' glxgears) does in its own make_window().
         val cmap = X.XCreateColormap(d, X.XRootWindow(d, s), viStruct.visual, AllocNone)
         val attrs = XSetWindowAttributes().apply {
             colormap = cmap
             event_mask = eventMask
             border_pixel = NativeLong(0)
+            background_pixel = NativeLong(0)
         }
 
         w = X.XCreateWindow(
@@ -146,7 +150,7 @@ class X11GameWindow(checkGl: Boolean) : EventLoopGameWindow() {
             winX, winY,
             width, height,
             0, viStruct.depth, InputOutput, viStruct.visual,
-            NativeLong((CWColormap or CWEventMask or CWBorderPixel).toLong()),
+            NativeLong((CWBackPixel or CWColormap or CWEventMask or CWBorderPixel).toLong()),
             attrs
         )
 
