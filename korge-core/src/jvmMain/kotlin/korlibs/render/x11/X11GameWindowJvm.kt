@@ -228,7 +228,14 @@ class X11GameWindow(checkGl: Boolean) : EventLoopGameWindow() {
             if (X.XPending(d) == 0) return
             X.XNextEvent(d, e)
             when (e.type) {
-                Expose -> if (e.xexpose.count == 0) render(doUpdate = false)
+                // Only *request* a redraw; do not render synchronously here. render() ends in
+                // doSwapBuffers(), which blocks until vblank, and this runs inside the event-drain
+                // loop, so a resize (which interleaves an Expose with every ConfigureNotify) would
+                // block ~16.7ms per queued Expose before any other event, including window-close,
+                // could be handled. A few hundred of them across one drag is several seconds of a
+                // frozen, frame-by-frame "catching up" resize. invalidatedView() sets the flag
+                // mustTriggerRender already reads, so the main loop redraws on its next iteration.
+                Expose -> if (e.xexpose.count == 0) invalidatedView()
                 ClientMessage, DestroyNotify -> close()
                 ConfigureNotify -> {
                     val conf = XConfigureEvent(e.pointer)
