@@ -219,6 +219,10 @@ class X11GameWindow(checkGl: Boolean) : EventLoopGameWindow() {
     }
 
     val e = XEvent()
+    // Scratch buffer for XPeekEvent, kept separate from `e` so peeking ahead doesn't clobber the
+    // event currently being handled.
+    private val peekEvent = XEvent()
+
     override fun doHandleEvents() {
         loop@ while (running) {
             if (X.XPending(d) == 0) return
@@ -230,19 +234,33 @@ class X11GameWindow(checkGl: Boolean) : EventLoopGameWindow() {
                     val conf = XConfigureEvent(e.pointer)
                     width = conf.width
                     height = conf.height
-                    // conf.x/conf.y are the window's position relative to its parent (the window
-                    // manager's reparenting frame after mapping): the screen position, not a
-                    // rendering offset. Passing them here used to flow straight into
-                    // AGFrameBuffer's x/y and from there into glViewport(x, y, w, h), placing the
-                    // actual GL viewport hundreds of pixels outside the window's own 0,0-w,h
-                    // drawable: every frame still rendered and presented successfully (verified
-                    // via the X Present protocol and zero GL errors), just entirely off-screen,
-                    // until an interactive resize's fluctuating x/y coordinates happened to land
-                    // closer to correct by chance. A top-level window's own drawable origin is
-                    // always (0, 0), regardless of where the window manager placed it on screen.
-                    // glxgears's own ConfigureNotify handler only ever passes width/height to
-                    // reshape(), never x/y, for this exact reason.
-                    dispatchReshapeEvent(0, 0, conf.width, conf.height)
+                    // An interactive resize fires a ConfigureNotify per pixel-step of the drag,
+                    // often hundreds of events for one gesture, arriving back-to-back within the
+                    // same doHandleEvents() call. Only dispatch the (comparatively expensive)
+                    // reshape, which cascades through Views.resized() and everything listening for
+                    // it, for the *last* ConfigureNotify in a run; superseded intermediate ones are
+                    // skipped. width/height above are still updated on every event, so
+                    // doInitRender's glViewport call, which runs every frame regardless, always
+                    // sees the latest size even between dispatches.
+                    val supersededByNextEvent = X.XPending(d) > 0 && run {
+                        X.XPeekEvent(d, peekEvent)
+                        peekEvent.type == ConfigureNotify
+                    }
+                    if (!supersededByNextEvent) {
+                        // conf.x/conf.y are the window's position relative to its parent (the window
+                        // manager's reparenting frame after mapping): the screen position, not a
+                        // rendering offset. Passing them here used to flow straight into
+                        // AGFrameBuffer's x/y and from there into glViewport(x, y, w, h), placing the
+                        // actual GL viewport hundreds of pixels outside the window's own 0,0-w,h
+                        // drawable: every frame still rendered and presented successfully (verified
+                        // via the X Present protocol and zero GL errors), just entirely off-screen,
+                        // until an interactive resize's fluctuating x/y coordinates happened to land
+                        // closer to correct by chance. A top-level window's own drawable origin is
+                        // always (0, 0), regardless of where the window manager placed it on screen.
+                        // glxgears's own ConfigureNotify handler only ever passes width/height to
+                        // reshape(), never x/y, for this exact reason.
+                        dispatchReshapeEvent(0, 0, width, height)
+                    }
                     // Deliberately not forcing a synchronous render() here. render() ends in
                     // doSwapBuffers(), which blocks until vblank, and this runs inside the
                     // event-drain loop, so one blocking render per queued resize event serialises
