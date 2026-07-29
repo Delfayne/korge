@@ -227,25 +227,30 @@ class X11GameWindow(checkGl: Boolean) : EventLoopGameWindow() {
                 Expose -> if (e.xexpose.count == 0) render(doUpdate = false)
                 ClientMessage, DestroyNotify -> close()
                 ConfigureNotify -> {
-                    render(doUpdate = false) {
-                        val conf = XConfigureEvent(e.pointer)
-                        width = conf.width
-                        height = conf.height
-                        // conf.x/conf.y are the window's position relative to its parent (the window
-                        // manager's reparenting frame after mapping): the screen position, not a
-                        // rendering offset. Passing them here used to flow straight into AGFrameBuffer's
-                        // x/y and from there into glViewport(x, y, w, h), placing the actual GL viewport
-                        // hundreds of pixels outside the window's own 0,0-w,h drawable: every frame still
-                        // rendered and presented successfully (verified via the X Present protocol and
-                        // zero GL errors), just entirely off-screen, until an interactive resize's
-                        // fluctuating x/y coordinates happened to land closer to correct by chance. A
-                        // top-level window's own drawable origin is always (0, 0), regardless of where
-                        // the window manager placed it on screen. glxgears's own ConfigureNotify handler
-                        // only ever passes width/height to reshape(), never x/y, for this exact reason.
-                        dispatchReshapeEvent(0, 0, conf.width, conf.height)
-                        !doubleBuffered
-                    }
-                    //println("RESIZED! ${conf.width} ${conf.height}")
+                    val conf = XConfigureEvent(e.pointer)
+                    width = conf.width
+                    height = conf.height
+                    // conf.x/conf.y are the window's position relative to its parent (the window
+                    // manager's reparenting frame after mapping): the screen position, not a
+                    // rendering offset. Passing them here used to flow straight into
+                    // AGFrameBuffer's x/y and from there into glViewport(x, y, w, h), placing the
+                    // actual GL viewport hundreds of pixels outside the window's own 0,0-w,h
+                    // drawable: every frame still rendered and presented successfully (verified
+                    // via the X Present protocol and zero GL errors), just entirely off-screen,
+                    // until an interactive resize's fluctuating x/y coordinates happened to land
+                    // closer to correct by chance. A top-level window's own drawable origin is
+                    // always (0, 0), regardless of where the window manager placed it on screen.
+                    // glxgears's own ConfigureNotify handler only ever passes width/height to
+                    // reshape(), never x/y, for this exact reason.
+                    dispatchReshapeEvent(0, 0, conf.width, conf.height)
+                    // Deliberately not forcing a synchronous render() here. render() ends in
+                    // doSwapBuffers(), which blocks until vblank, and this runs inside the
+                    // event-drain loop, so one blocking render per queued resize event serialises
+                    // the whole drag at one frame each. continuousRenderMode is on by default, so
+                    // the main loop already renders every frame regardless; the state update above
+                    // is picked up on its very next iteration. glxgears's own ConfigureNotify
+                    // handler works the same way, updating reshape state only and leaving the
+                    // actual draw to its normal frame loop.
                 }
                 KeyPress, KeyRelease -> {
                     val pressing = e.type == KeyPress
