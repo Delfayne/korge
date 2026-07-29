@@ -98,9 +98,13 @@ class X11GameWindow(checkGl: Boolean) : EventLoopGameWindow() {
         s = X.XDefaultScreen(d)
         root = X.XDefaultRootWindow(d)
 
-        val vi = X11OpenglContext.chooseVisuals(d, s)
+        val vi = X11OpenglContext.chooseVisuals(d, s) ?: error("Can't choose a GLX visual")
+        // `XVisualInfo` (the typealias in this package) is a raw Pointer: wrap it in the real JNA struct
+        // to read its fields, since glXChooseVisual/glXCreateContext only need the opaque pointer but
+        // XCreateColormap/XCreateWindow below need the actual visual/depth/visualid values.
+        val viStruct = com.sun.jna.Structure.newInstance(com.sun.jna.platform.unix.X11.XVisualInfo::class.java, vi)
+            .also { it.read() }
 
-        //val cmap = XCreateColormap(d, root, vi->visual, AllocNone);
         val screenWidth = X.XDisplayWidth(d, s)
         val screenHeight = X.XDisplayHeight(d, s)
 
@@ -110,16 +114,6 @@ class X11GameWindow(checkGl: Boolean) : EventLoopGameWindow() {
         val winY = screenHeight / 2 - height / 2
 
         println("screenWidth: $screenWidth, screenHeight: $screenHeight, winX=$winX, winY=$winY, width=$width, height=$height")
-
-        w = X.XCreateSimpleWindow(
-            d, X.XRootWindow(d, s),
-            winX, winY,
-            width, height,
-            1,
-            X.XBlackPixel(d, s), X.XWhitePixel(d, s)
-        )
-        //val attr = XSetWindowAttributes().apply { autoWrite() }.apply { autoRead() }
-        //XChangeWindowAttributes(d, w, NativeLong(0L), attr)
 
         val eventMask = NativeLong(
             (ExposureMask
@@ -134,6 +128,26 @@ class X11GameWindow(checkGl: Boolean) : EventLoopGameWindow() {
                 or ButtonMotionMask
                 )
                 .toLong()
+        )
+
+        // The window is built with XCreateWindow against a colormap constructed from the chosen GLX
+        // visual, not XCreateSimpleWindow (which always uses the screen's default visual/colormap,
+        // ignoring the one glXChooseVisual picked). The Khronos GLX context-creation tutorial linked
+        // above explicitly documents XCreateSimpleWindow as unusable for this reason.
+        val cmap = X.XCreateColormap(d, X.XRootWindow(d, s), viStruct.visual, AllocNone)
+        val attrs = XSetWindowAttributes().apply {
+            colormap = cmap
+            event_mask = eventMask
+            border_pixel = NativeLong(0)
+        }
+
+        w = X.XCreateWindow(
+            d!!, X.XRootWindow(d, s),
+            winX, winY,
+            width, height,
+            0, viStruct.depth, InputOutput, viStruct.visual,
+            NativeLong((CWColormap or CWEventMask or CWBorderPixel).toLong()),
+            attrs
         )
 
         X.XSelectInput(d, w, eventMask)
