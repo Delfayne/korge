@@ -88,11 +88,14 @@ fun Project.configureJvmRunJvm(isRootKorlibs: Boolean) {
         project.tasks.registerThis<KorgeJavaExec>("runJvm${capitalizedEntryName}") {
             group = GROUP_KORGE_RUN
             dependsOn("jvmMainClasses")
-            project.afterEvaluate {
-                mainClass.set(entry.jvmMainClassName())
-                val beforeJava9 = JvmAddOpens.beforeJava9
-                if (!beforeJava9) jvmArgs(project.korge.javaAddOpens)
-            }
+            // registerThis is lazy: this whole block is already deferred past project
+            // evaluation, so (unlike the eager createThis this replaced) it must not
+            // wrap its body in project.afterEvaluate { }; by the time a lazily
+            // registered task's configuration action runs, the project is no longer
+            // accepting new afterEvaluate callbacks.
+            mainClass.set(entry.jvmMainClassName())
+            val beforeJava9 = JvmAddOpens.beforeJava9
+            if (!beforeJava9) jvmArgs(project.korge.javaAddOpens)
         }
         for (enableRedefinition in listOf(false)) {
             val taskName = when (enableRedefinition) {
@@ -103,14 +106,12 @@ fun Project.configureJvmRunJvm(isRootKorlibs: Boolean) {
                 this.enableRedefinition = enableRedefinition
                 group = GROUP_KORGE_RUN
                 dependsOn("jvmMainClasses", "compileKotlinJvm")
-                project.afterEvaluate {
-                    if (isRootKorlibs) {
-                        dependsOn(":korge-reload-agent:jar")
-                    }
-                    val beforeJava9 = JvmAddOpens.beforeJava9
-                    if (!beforeJava9) jvmArgs(project.korge.javaAddOpens)
-                    mainClass.set(korge.jvmMainClassName)
+                if (isRootKorlibs) {
+                    dependsOn(":korge-reload-agent:jar")
                 }
+                val beforeJava9 = JvmAddOpens.beforeJava9
+                if (!beforeJava9) jvmArgs(project.korge.javaAddOpens)
+                mainClass.set(korge.jvmMainClassName)
             }
         }
     }
