@@ -215,8 +215,24 @@ fun RenderContext2D.drawText(
     val sy = pos.y + if (baseline) -font.base * scale else 0.0
     //println("multiplyColor=$multiplyColor")
     var n = 0
+    // Kerning is applied to the pen position before the glyph is drawn, and, like xadvance below,
+    // outside the textRange check, so that revealing a prefix of the text does not shift the glyphs
+    // that are already visible. -1 marks "no previous glyph", so the first one is never kerned.
+    //
+    // The size-taking overload rather than the pair-returning one: both give getTextScale(size) *
+    // amount for a stock BitmapFont, so this is behaviour-preserving, but this one returns a Double
+    // and so lets an implementation with sub-pixel pairs report them without rounding to whole
+    // atlas pixels first.
+    //
+    // Kerning does not carry across a call boundary: drawText(RichTextDataPlacements) invokes this
+    // once per placement, so a pair spanning two style runs goes unkerned.
+    var prevCodePoint = -1
     for (char in text) {
         val glyph = font.getGlyph(char)
+        if (prevCodePoint >= 0) {
+            sx += font.getKerning(textSize, prevCodePoint, char.code)
+        }
+        prevCodePoint = char.code
         if (n in textRangeStart until textRangeEnd) {
             rect(
                 Rectangle(
