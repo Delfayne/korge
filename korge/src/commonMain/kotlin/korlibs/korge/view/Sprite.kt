@@ -339,7 +339,10 @@ open class Sprite(
                 endFrame > startFrame -> (if (reversed) (startFrame - endFrame) umod it.spriteStackSize else endFrame - startFrame)
                 else -> 0
             }
-            val requestedFrames = count + (animationCyclesRequested * it.spriteStackSize)
+            // How far one repeat travels: the start-to-end span, or a whole cycle when the two
+            // coincide -- which is the default, and why summing the two below went unnoticed.
+            val framesPerCycle = if (count == 0) it.spriteStackSize else count
+            val requestedFrames = animationCyclesRequested * framesPerCycle
             this.animationNumberOfFramesRequested = requestedFrames
         }
     }
